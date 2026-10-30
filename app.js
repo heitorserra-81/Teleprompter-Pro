@@ -1,0 +1,21 @@
+const $=id=>document.getElementById(id);
+const camera=$('camera'), placeholder=$('placeholder'), prompt=$('promptText'), overlay=$('promptOverlay');
+let stream=null, recorder=null, chunks=[], scrollTimer=null, recordingStart=0, timerInterval=null;
+function updatePrompt(){prompt.textContent=$('scriptInput').value; prompt.style.fontFamily=$('fontFamily').value;prompt.style.fontSize=$('fontSize').value+'px';prompt.style.color=$('fontColor').value;prompt.style.opacity=$('textOpacity').value/100;overlay.style.top=$('position').value+'%';prompt.style.background=$('showBg').checked?`rgba(0,0,0,${$('opacity').value/100})`:'transparent';prompt.style.textShadow=$('outline').checked?'0 2px 5px #000, 1px 1px 2px #000':'none';overlay.style.display=$('showText').checked?'block':'none';prompt.style.transform=$('flip').checked?'scaleY(-1)':'none';}
+$('applyScript').onclick=updatePrompt;
+$('clearBtn').onclick=()=>{$('scriptInput').value='';updatePrompt()};
+['fontFamily','fontSize','fontColor','opacity','textOpacity','position','outline','showBg','showText','flip'].forEach(id=>$(id).addEventListener('input',()=>{updatePrompt();if(id==='fontSize')$('fontSizeOut').value=$('fontSize').value+' px';if(id==='opacity')$('opacityOut').value=$('opacity').value+'%';if(id==='textOpacity')$('textOpacityOut').value=$('textOpacity').value+'%';if(id==='position')$('positionOut').value=$('position').value+'%'}));
+$('speed').oninput=()=> $('speedOut').value=$('speed').value;
+$('mirror').onchange=()=>camera.style.transform=$('mirror').checked?'scaleX(-1)':'none';
+document.querySelectorAll('[data-format]').forEach(btn=>btn.onclick=()=>{const start=$('scriptInput').selectionStart,end=$('scriptInput').selectionEnd;if(start===end)return;const v=$('scriptInput').value,tag=btn.dataset.format==='bold'?'**':btn.dataset.format==='italic'?'_':'__';$('scriptInput').setRangeText(tag+v.slice(start,end)+tag,start,end,'select');updatePrompt()});
+$('cameraBtn').onclick=async()=>{try{stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user'},audio:true});camera.srcObject=stream;camera.style.display='block';placeholder.hidden=true;$('recordBtn').disabled=false;$('cameraBtn').textContent='✓ Câmera ativa'}catch(e){alert('Não foi possível acessar a câmera/microfone. Verifique as permissões e use HTTPS ou localhost.')}};
+$('recordBtn').onclick=()=>{if(!stream)return;if(recorder&&recorder.state==='recording'){recorder.stop();$('recordBtn').textContent='● Gravar';clearInterval(timerInterval);$('recordIndicator').hidden=true;return}chunks=[];let opts={};if(MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus'))opts.mimeType='video/webm;codecs=vp9,opus';recorder=new MediaRecorder(stream,opts);recorder.ondataavailable=e=>{if(e.data.size)chunks.push(e.data)};recorder.onstop=()=>{const blob=new Blob(chunks,{type:recorder.mimeType||'video/webm'}),url=URL.createObjectURL(blob);$('playback').src=url;$('downloadVideo').href=url;$('recordedPanel').hidden=false};recorder.start();recordingStart=Date.now();$('recordIndicator').hidden=false;$('recordBtn').textContent='■ Parar gravação';timerInterval=setInterval(()=>{let s=Math.floor((Date.now()-recordingStart)/1000);$('recordTimer').textContent=String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0')},500)};
+$('startScroll').onclick=()=>{if(scrollTimer)return;scrollTimer=setInterval(()=>{overlay.scrollTop+=Number($('speed').value)/20;if(overlay.scrollTop+overlay.clientHeight>=overlay.scrollHeight)clearInterval(scrollTimer),scrollTimer=null},50)};
+$('pauseScroll').onclick=()=>{clearInterval(scrollTimer);scrollTimer=null};
+$('resetScroll').onclick=()=>{ $('pauseScroll').click();overlay.scrollTop=0};
+$('fullscreenBtn').onclick=()=>{const el=$('stage');if(!document.fullscreenElement)el.requestFullscreen?.();else document.exitFullscreen?.()};
+$('settingsBtn').onclick=()=>$('settingsDialog').showModal();
+let deferredPrompt;$('installBtn').onclick=async()=>{if(!deferredPrompt)return;deferredPrompt.prompt();await deferredPrompt.userChoice;deferredPrompt=null;$('installBtn').hidden=true};
+window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferredPrompt=e;$('installBtn').hidden=false});
+if('serviceWorker'in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));
+updatePrompt();
